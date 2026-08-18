@@ -7,11 +7,10 @@ import {
 import { getFileExtension, normalizeMimeType } from "openclaw/plugin-sdk/media-mime";
 import { saveRemoteMedia, type FetchLike } from "openclaw/plugin-sdk/media-runtime";
 import { getChildLogger, logVerbose } from "openclaw/plugin-sdk/runtime-env";
-import type { SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
+import { mergeSsrFPolicies, type SsrFPolicy } from "openclaw/plugin-sdk/ssrf-runtime";
 import {
   normalizeLowercaseStringOrEmpty,
   normalizeOptionalString,
-  uniqueStrings,
 } from "openclaw/plugin-sdk/string-coerce-runtime";
 import type { Message } from "../internal/discord.js";
 import { resolveDiscordProviderMediaDownloadGuard } from "../provider-endpoint.js";
@@ -134,38 +133,8 @@ function resolveDiscordMediaClassification(params: {
   };
 }
 
-function mergeHostnameList(...lists: Array<string[] | undefined>): string[] | undefined {
-  const merged = lists
-    .flatMap((list) => list ?? [])
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0);
-  if (merged.length === 0) {
-    return undefined;
-  }
-  return uniqueStrings(merged);
-}
-
-function resolveDiscordMediaSsrFPolicy(policy?: SsrFPolicy): SsrFPolicy {
-  if (!policy) {
-    return DISCORD_MEDIA_SSRF_POLICY;
-  }
-  const hostnameAllowlist = mergeHostnameList(
-    DISCORD_MEDIA_SSRF_POLICY.hostnameAllowlist,
-    policy.hostnameAllowlist,
-  );
-  const allowedHostnames = mergeHostnameList(
-    DISCORD_MEDIA_SSRF_POLICY.allowedHostnames,
-    policy.allowedHostnames,
-  );
-  return {
-    ...DISCORD_MEDIA_SSRF_POLICY,
-    ...policy,
-    ...(allowedHostnames ? { allowedHostnames } : {}),
-    ...(hostnameAllowlist ? { hostnameAllowlist } : {}),
-    allowRfc2544BenchmarkRange:
-      Boolean(DISCORD_MEDIA_SSRF_POLICY.allowRfc2544BenchmarkRange) ||
-      Boolean(policy.allowRfc2544BenchmarkRange),
-  };
+function resolveDiscordMediaSsrFPolicy(...policies: Array<SsrFPolicy | undefined>): SsrFPolicy {
+  return mergeSsrFPolicies(DISCORD_MEDIA_SSRF_POLICY, ...policies) ?? DISCORD_MEDIA_SSRF_POLICY;
 }
 
 export async function resolveMediaList(
@@ -313,21 +282,7 @@ async function fetchDiscordMedia(params: {
   originalFilename?: string;
 }) {
   const providerGuard = resolveDiscordProviderMediaDownloadGuard(params.url);
-  const ssrfPolicy = resolveDiscordMediaSsrFPolicy(
-    providerGuard
-      ? {
-          ...params.ssrfPolicy,
-          allowedOrigins: mergeHostnameList(
-            params.ssrfPolicy?.allowedOrigins,
-            providerGuard.policy.allowedOrigins,
-          ),
-          hostnameAllowlist: mergeHostnameList(
-            params.ssrfPolicy?.hostnameAllowlist,
-            providerGuard.policy.hostnameAllowlist,
-          ),
-        }
-      : params.ssrfPolicy,
-  );
+  const ssrfPolicy = resolveDiscordMediaSsrFPolicy(params.ssrfPolicy, providerGuard?.policy);
   const timeoutAbortController = params.totalTimeoutMs ? new AbortController() : undefined;
   const signal =
     params.abortSignal && timeoutAbortController
