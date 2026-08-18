@@ -21,7 +21,11 @@ import {
   refreshChatModelAuthStatus,
   retireChatMetadataRequests,
 } from "./chat-state-refresh.ts";
-import { resolveChatAvatarUrl, selectedChatSessionRow } from "./chat-state-route.ts";
+import {
+  reconcileChatModelCatalogOwner,
+  resolveChatAvatarUrl,
+  selectedChatSessionRow,
+} from "./chat-state-route.ts";
 import { buildChatItems } from "./chat-thread-build.ts";
 import { getChatSessionProjection } from "./history-merge.ts";
 import { scheduleControlUiAfterPaint } from "./performance.ts";
@@ -1953,8 +1957,19 @@ describe("refreshChatMetadata", () => {
   ): ChatPageHost {
     return {
       ...makeChatHost(),
-      agentsList: null,
+      agentsList: {
+        defaultId: "main",
+        mainKey: "main",
+        scope: "agent",
+        agents: [
+          { id: "main", kind: "agent" },
+          { id: "work", kind: "agent" },
+          { id: "other", kind: "agent" },
+          { id: "openclaw", kind: "system" },
+        ],
+      },
       assistantAgentId: "main",
+      chatModelCatalogAgentId: "work",
       client: { request },
       hello: { features: { methods: ["chat.metadata"] } },
       sessionKey: "agent:work:main",
@@ -1999,6 +2014,26 @@ describe("refreshChatMetadata", () => {
       { id: "work-model", name: "Work Model", provider: "openai", available: true },
     ]);
     expect(request).toHaveBeenCalledTimes(1);
+  });
+
+  it("retires a prior catalog error without requesting metadata for a system agent", async () => {
+    const request = vi.fn();
+    const state = createMetadataState(request, {
+      sessionKey: "agent:openclaw:system",
+      chatModelCatalog: [
+        { id: "stale-model", name: "Stale Model", provider: "openai", available: true },
+      ],
+      chatModelCatalogAgentId: "work",
+      chatModelCatalogError: 'unknown agent id "openclaw"',
+    });
+
+    reconcileChatModelCatalogOwner(state);
+    await refreshChatMetadata(state);
+
+    expect(request).not.toHaveBeenCalled();
+    expect(state.chatModelCatalog).toEqual([]);
+    expect(state.chatModelCatalogAgentId).toBeNull();
+    expect(state.chatModelCatalogError).toBeNull();
   });
 
   it("reuses same-agent metadata and fetches a cross-agent catalog", async () => {
@@ -2192,6 +2227,12 @@ describe("refreshChatModelAuthStatus", () => {
       connected: true,
       connectionEpoch: 1,
       sessionKey: "agent:work:dashboard:current",
+      agentsList: {
+        defaultId: "main",
+        mainKey: "main",
+        scope: "agent",
+        agents: [{ id: "work", kind: "agent" }],
+      },
       assistantAgentId: "main",
       modelAuthStatusResult: null,
       modelAuthStatusError: null,
@@ -2217,6 +2258,14 @@ describe("refreshChatModelAuthStatus", () => {
         client: { request },
         connected: true,
         connectionEpoch: 1,
+        sessionKey: "agent:work:dashboard:current",
+        agentsList: {
+          defaultId: "main",
+          mainKey: "main",
+          scope: "agent",
+          agents: [{ id: "work", kind: "agent" }],
+        },
+        assistantAgentId: "main",
         modelAuthStatusResult: currentStatus,
         modelAuthStatusError: null,
       } as unknown as ChatPageHost;
