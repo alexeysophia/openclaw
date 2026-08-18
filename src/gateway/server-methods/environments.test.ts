@@ -459,7 +459,8 @@ describe("environment gateway methods", () => {
             {
               id: "standard",
               label: "Standard",
-              description: "Cheap smoke checks and small repos",
+              cpu: 32,
+              memoryGb: 64,
               default: true,
             },
           ]
@@ -481,7 +482,8 @@ describe("environment gateway methods", () => {
             {
               id: "standard",
               label: "Standard",
-              description: "Cheap smoke checks and small repos",
+              cpu: 32,
+              memoryGb: 64,
               default: true,
             },
           ],

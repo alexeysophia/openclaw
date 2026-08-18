@@ -7,6 +7,7 @@ import {
   type WorkerProvider,
 } from "openclaw/plugin-sdk/plugin-entry";
 import { runCommandWithTimeout, type SpawnResult } from "openclaw/plugin-sdk/process-runtime";
+import { asPositiveSafeInteger, isRecord } from "openclaw/plugin-sdk/string-coerce-runtime";
 import { truncateUtf16Safe } from "openclaw/plugin-sdk/text-utility-runtime";
 import {
   crabboxCommandError,
@@ -23,6 +24,7 @@ import { createCrabboxHeartbeatManager } from "./crabbox-worker-heartbeat.js";
 import { parseInspectJson, type ParsedInspect } from "./crabbox-worker-inspect.js";
 import {
   buildCrabboxWarmupArgs,
+  type CrabboxMachineShape,
   CRABBOX_WORKER_PROVIDER_ID,
   listCrabboxMachineOptions,
   nonEmptyString,
@@ -81,6 +83,7 @@ type ProvisionInspectContext = Omit<LeaseCommandContext, "id"> & {
 };
 
 type InspectCommandResult = { status: "found"; inspect: ParsedInspect } | { status: "unknown" };
+type CrabboxMachineShapes = ReadonlyMap<string, readonly CrabboxMachineShape[]>;
 
 type CrabboxWorkerProviderDependencies = {
   isExecutable?: (candidate: string) => boolean;
@@ -91,6 +94,37 @@ type CrabboxWorkerProviderDependencies = {
   sleep?: (milliseconds: number) => Promise<void>;
   warn?: (message: string) => void;
 };
+
+function parseCrabboxMachineShapes(stdout: string): CrabboxMachineShapes {
+  const parsed: unknown = JSON.parse(stdout);
+  if (!Array.isArray(parsed)) {
+    throw new Error("Crabbox providers returned invalid JSON");
+  }
+  return new Map(
+    parsed.flatMap<[string, readonly CrabboxMachineShape[]]>((entry) => {
+      if (!isRecord(entry)) {
+        return [];
+      }
+      const rawClasses = Array.isArray(entry.classes) ? entry.classes : [];
+      const classes = rawClasses.flatMap<CrabboxMachineShape>((raw) => {
+        if (!isRecord(raw)) {
+          return [];
+        }
+        const machineClass = nonEmptyString(raw.class);
+        if (!machineClass) {
+          return [];
+        }
+        const cpu = asPositiveSafeInteger(raw.vcpu);
+        const memoryGb = asPositiveSafeInteger(raw.memoryGb);
+        return [
+          { class: machineClass, ...(cpu ? { cpu } : {}), ...(memoryGb ? { memoryGb } : {}) },
+        ];
+      });
+      const provider = nonEmptyString(entry.provider)?.toLowerCase();
+      return provider && classes.length > 0 ? [[provider, classes]] : [];
+    }),
+  );
+}
 
 async function assertAwsWorkerHasNoInstanceProfile(params: {
   binary: string;
@@ -437,6 +471,7 @@ export function createCrabboxWorkerProvider(
   dependencies: CrabboxWorkerProviderDependencies = {},
 ): WorkerProvider {
   const runCommand = dependencies.runCommand ?? runCommandWithTimeout;
+  const warn = dependencies.warn ?? (() => {});
   const sleep =
     dependencies.sleep ??
     ((milliseconds) =>
@@ -463,9 +498,10 @@ export function createCrabboxWorkerProvider(
         signal,
         timeoutMs: Math.min(CRABBOX_LIFECYCLE_TIMEOUT_MS, context.heartbeatIntervalMs),
       }),
-    warn: dependencies.warn ?? (() => {}),
+    warn,
   });
   let defaultBinary: string | undefined;
+  let machineShapes: Promise<CrabboxMachineShapes> | undefined;
   const resolveBinary = (explicit?: string) => {
     if (explicit) {
       return explicit;
@@ -478,6 +514,26 @@ export function createCrabboxWorkerProvider(
       platform: dependencies.platform,
     });
     return defaultBinary;
+  };
+  const loadMachineShapes = async (binary: string): Promise<CrabboxMachineShapes> => {
+    try {
+      const result = await runCrabboxCommand({
+        action: "providers",
+        args: ["providers", "--json"],
+        binary,
+        runCommand,
+        timeoutMs: CRABBOX_LIFECYCLE_TIMEOUT_MS,
+      });
+      if (result.termination !== "exit" || result.code !== 0) {
+        throw new Error("Crabbox providers command failed");
+      }
+      return parseCrabboxMachineShapes(result.stdout);
+    } catch (error) {
+      warn(
+        `Crabbox machine shapes unavailable: ${error instanceof Error ? error.message : String(error)}`,
+      );
+      return new Map();
+    }
   };
   const resolveLeaseContext = (
     lease: Parameters<WorkerProvider["inspect"]>[0],
@@ -497,7 +553,14 @@ export function createCrabboxWorkerProvider(
 
   return {
     id: CRABBOX_WORKER_PROVIDER_ID,
-    listMachineOptions: listCrabboxMachineOptions,
+    async listMachineOptions(profile) {
+      const parsed = parseCrabboxProfile(profile);
+      // Provider metadata is process-stable, so one catalog read serves the whole lifecycle.
+      // The first profile's binary wins: sibling profiles pointing at different Crabbox builds
+      // would share this catalog, which is accepted rather than keyed per binary.
+      machineShapes ??= loadMachineShapes(resolveBinary(parsed.binary));
+      return listCrabboxMachineOptions(parsed.class, (await machineShapes).get(parsed.provider));
+    },
     supportedExecutionModes: ["worker-turn"],
     provisionBeforeInstallation: true,
     requiresNodeEnrollment: true,
