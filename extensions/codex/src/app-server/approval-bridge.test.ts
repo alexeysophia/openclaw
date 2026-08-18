@@ -200,6 +200,139 @@ describe("Codex app-server approval bridge", () => {
     }));
   });
 
+  it("only offers operator decisions that the native command request can enforce", async () => {
+    const params = createParams();
+    params.hostCapabilities = {
+      ...params.hostCapabilities,
+      prepareMutableFileApproval: prepareApprovalWithoutMutableFile,
+    };
+    mockCallGatewayTool
+      .mockResolvedValueOnce({ id: "plugin:approval-native-once", status: "accepted" })
+      .mockResolvedValueOnce({
+        id: "plugin:approval-native-once",
+        decision: "allow-once",
+      });
+
+    const result = await handleCodexAppServerApprovalRequest({
+      method: "item/commandExecution/requestApproval",
+      requestParams: {
+        ...codexTestTurnIds(),
+        itemId: "cmd-native-once",
+        command: "git status",
+        availableDecisions: ["accept", "cancel"],
+      },
+      paramsForRun: params,
+      ...codexTestTurnIds(),
+    });
+
+    expect(result).toEqual({ decision: "accept" });
+    expect(gatewayRequestPayload().allowedDecisions).toEqual(["allow-once", "deny"]);
+  });
+
+  it("offers session approval only when the native command request can preserve it", async () => {
+    const params = createParams();
+    params.hostCapabilities = {
+      ...params.hostCapabilities,
+      prepareMutableFileApproval: prepareApprovalWithoutMutableFile,
+    };
+    mockCallGatewayTool
+      .mockResolvedValueOnce({ id: "plugin:approval-native-session", status: "accepted" })
+      .mockResolvedValueOnce({
+        id: "plugin:approval-native-session",
+        decision: "allow-always",
+      });
+
+    const result = await handleCodexAppServerApprovalRequest({
+      method: "item/commandExecution/requestApproval",
+      requestParams: {
+        ...codexTestTurnIds(),
+        itemId: "cmd-native-session",
+        command: "git status",
+        availableDecisions: ["accept", "acceptForSession", "decline", "cancel"],
+      },
+      paramsForRun: params,
+      ...codexTestTurnIds(),
+    });
+
+    expect(result).toEqual({ decision: "acceptForSession" });
+    expect(gatewayRequestPayload().allowedDecisions).toEqual([
+      "allow-once",
+      "allow-always",
+      "deny",
+    ]);
+  });
+
+  it.each([
+    ["operator denial", false],
+    ["run cancellation", true],
+  ] as const)("maps %s to an advertised native command rejection", async (_label, abortRun) => {
+    const params = createParams();
+    params.hostCapabilities = {
+      ...params.hostCapabilities,
+      prepareMutableFileApproval: prepareApprovalWithoutMutableFile,
+    };
+    const controller = new AbortController();
+    mockCallGatewayTool
+      .mockResolvedValueOnce({ id: "plugin:approval-native-cancel", status: "accepted" })
+      .mockImplementationOnce(async () => {
+        if (abortRun) {
+          controller.abort("client_closed");
+        }
+        return { id: "plugin:approval-native-cancel", decision: "deny" };
+      });
+
+    const result = await handleCodexAppServerApprovalRequest({
+      method: "item/commandExecution/requestApproval",
+      requestParams: {
+        ...codexTestTurnIds(),
+        itemId: "cmd-native-cancel",
+        command: "git status",
+        availableDecisions: ["accept", "cancel"],
+      },
+      paramsForRun: params,
+      ...codexTestTurnIds(),
+      signal: controller.signal,
+    });
+
+    expect(result).toEqual({ decision: "cancel" });
+    expect(gatewayRequestPayload().allowedDecisions).toEqual(["allow-once", "deny"]);
+  });
+
+  it.each([
+    ["allow-once", "accept"],
+    ["allow-always", "acceptForSession"],
+    ["deny", "decline"],
+  ] as const)(
+    "maps file operator decision %s to native %s",
+    async (gatewayDecision, nativeDecision) => {
+      const params = createParams();
+      mockCallGatewayTool
+        .mockResolvedValueOnce({ id: `plugin:file-${gatewayDecision}`, status: "accepted" })
+        .mockResolvedValueOnce({
+          id: `plugin:file-${gatewayDecision}`,
+          decision: gatewayDecision,
+        });
+
+      const result = await handleCodexAppServerApprovalRequest({
+        method: "item/fileChange/requestApproval",
+        requestParams: {
+          ...codexTestTurnIds(),
+          itemId: `file-${gatewayDecision}`,
+          reason: "update generated output",
+        },
+        paramsForRun: params,
+        ...codexTestTurnIds(),
+      });
+
+      expect(result).toEqual({ decision: nativeDecision });
+      expect(gatewayRequestPayload().allowedDecisions).toEqual([
+        "allow-once",
+        "allow-always",
+        "deny",
+      ]);
+    },
+  );
+
   it("keeps unrelated command approval policy unchanged for scheduled app authority", async () => {
     const params = {
       ...createParams(),
@@ -442,7 +575,7 @@ describe("Codex app-server approval bridge", () => {
       };
       mockCallGatewayTool
         .mockResolvedValueOnce({ id: "plugin:script-stable", status: "accepted" })
-        .mockResolvedValueOnce({ id: "plugin:script-stable", decision: "allow-always" });
+        .mockResolvedValueOnce({ id: "plugin:script-stable", decision: "allow-once" });
 
       const result = await handleCodexAppServerApprovalRequest({
         method: "item/commandExecution/requestApproval",
@@ -451,16 +584,18 @@ describe("Codex app-server approval bridge", () => {
           itemId: "cmd-script-stable",
           command: `sh ${scriptPath}`,
           cwd: tempDir,
+          availableDecisions: ["accept", "acceptForSession", "cancel"],
         },
         paramsForRun: params,
         ...codexTestTurnIds(),
       });
 
       expect(result).toEqual({ decision: "accept" });
+      expect(gatewayRequestPayload().allowedDecisions).toEqual(["allow-once", "deny"]);
       findApprovalEvent(params, {
         status: "approved",
         approvalId: "plugin:script-stable",
-        message: "Codex app-server approval granted for this byte-bound command only.",
+        message: "Codex app-server approval granted for this turn.",
       });
     } finally {
       await fs.rm(tempDir, { recursive: true, force: true });
