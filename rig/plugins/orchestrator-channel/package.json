@@ -1,0 +1,14 @@
+{
+  "name": "orchestrator-channel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "persond orchestrator delivery channel for OpenClaw (outbound-only)",
+  "type": "module",
+  "openclaw": {
+    "extensions": ["./index.js"],
+    "channel": {
+      "id": "orchestrator",
+      "label": "Orchestrator"
+    }
+  }
+}
