@@ -1,7 +1,8 @@
 {
   "gateway": {
     "mode": "local",
-    "auth": { "mode": "token", "token": "rig-secret" },
+    "bind": "loopback",
+    "auth": { "mode": "none" },
     "http": { "endpoints": { "chatCompletions": { "enabled": true }, "responses": { "enabled": true } } }
   },
   "models": {
@@ -30,19 +31,19 @@
     "ownership": "explicit",
     "defaults": {
       "model": { "primary": "mock/mock-model" },
-      "workspace": "RIG_DIR/workspace-main",
+      "workspace": "/work/openclaw/rig/workspace-main",
       "skipBootstrap": true,
       "subagents": { "allowAgents": ["background-worker"], "requireAgentId": true }
     },
     "entries": {
       "main": {},
-      "background-worker": { "workspace": "RIG_DIR/worker-workspace" }
+      "background-worker": { "workspace": "/work/openclaw/rig/worker-workspace" }
     }
   },
   "channels": { "orchestrator": { "enabled": true } },
   "plugins": {
     "entries": { "orchestrator-channel": { "enabled": true } },
-    "load": { "paths": ["RIG_DIR/plugins/orchestrator-channel"] }
+    "load": { "paths": ["/work/openclaw/rig/plugins/orchestrator-channel"] }
   },
   "tools": { "deny": ["cron", "image_generate"] }
 }

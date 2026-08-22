@@ -11,10 +11,10 @@ mkdir -p plugins/orchestrator-channel/node_modules
 ln -sfn /work/openclaw plugins/orchestrator-channel/node_modules/openclaw
 
 if ! curl -s -o /dev/null http://127.0.0.1:8113/control/log; then
-  nohup node mock-llm.js > logs/mock-llm.log 2>&1 &
+  nohup node mock-llm.cjs > logs/mock-llm.log 2>&1 &
 fi
 if ! curl -s -o /dev/null http://127.0.0.1:8114/control/log; then
-  nohup node fake-orchestrator.js > logs/fake-orch.log 2>&1 &
+  nohup node fake-orchestrator.cjs > logs/fake-orch.log 2>&1 &
 fi
 sleep 1
 

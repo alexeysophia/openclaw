@@ -12,36 +12,36 @@ echo "=== B1: /v1/responses, target header + scopes=operator.write => expect 403
 M0=$(mock_count)
 curl -s -w "\nHTTP %{http_code}\n" "$GW/v1/responses" -X POST -H "Content-Type: application/json" \
   -H "x-openclaw-scopes: operator.write" \
-  -H "x-openclaw-session-key: rig-b1-session" \
+  -H "x-openclaw-session-key: agent:main:rig-b1-session" \
   -H "x-openclaw-message-channel: orchestrator" \
   -H "x-openclaw-message-to: user" \
-  -d '{"model":"openclaw","input":"plain question","stream":false}'
+  -d '{"model":"openclaw/main","input":"plain question","stream":false}'
 echo "provider requests before=$M0 after=$(mock_count)"
 
 echo "=== B2: /v1/chat/completions, target header + scopes=operator.write => expect 403 ==="
 M0=$(mock_count)
 curl -s -w "\nHTTP %{http_code}\n" "$GW/v1/chat/completions" -X POST -H "Content-Type: application/json" \
   -H "x-openclaw-scopes: operator.write" \
-  -H "x-openclaw-session-key: rig-b2-session" \
+  -H "x-openclaw-session-key: agent:main:rig-b2-session" \
   -H "x-openclaw-message-channel: orchestrator" \
   -H "x-openclaw-message-to: user" \
-  -d '{"model":"openclaw","messages":[{"role":"user","content":"plain question"}],"stream":false}'
+  -d '{"model":"openclaw/main","messages":[{"role":"user","content":"plain question"}],"stream":false}'
 echo "provider requests before=$M0 after=$(mock_count)"
 
 echo "=== B3: /v1/responses, target header + scopes=operator.admin, operator.write => expect 200 ==="
 push '{"match":"ADMIN-OK","response":{"type":"text","text":"ADMIN_SCOPE_ACCEPTED_REPLY"}}'
 curl -s -w "\nHTTP %{http_code}\n" "$GW/v1/responses" -X POST -H "Content-Type: application/json" \
   -H "x-openclaw-scopes: operator.admin, operator.write" \
-  -H "x-openclaw-session-key: rig-b3-session" \
+  -H "x-openclaw-session-key: agent:main:rig-b3-session" \
   -H "x-openclaw-message-channel: orchestrator" \
   -H "x-openclaw-message-to: user" \
-  -d '{"model":"openclaw","input":"ADMIN-OK plain question","stream":false}' | head -c 500
+  -d '{"model":"openclaw/main","input":"ADMIN-OK plain question","stream":false}' | head -c 500
 
 echo "=== B4: /v1/responses, NO target header + scopes=operator.write => expect 200 (unchanged for non-owners not using the header) ==="
 push '{"match":"WRITE-OK","response":{"type":"text","text":"WRITE_SCOPE_NO_HEADER_REPLY"}}'
 curl -s -w "\nHTTP %{http_code}\n" "$GW/v1/responses" -X POST -H "Content-Type: application/json" \
   -H "x-openclaw-scopes: operator.write" \
-  -H "x-openclaw-session-key: rig-b4-session" \
+  -H "x-openclaw-session-key: agent:main:rig-b4-session" \
   -H "x-openclaw-message-channel: orchestrator" \
-  -d '{"model":"openclaw","input":"WRITE-OK plain question","stream":false}' | head -c 500
+  -d '{"model":"openclaw/main","input":"WRITE-OK plain question","stream":false}' | head -c 500
 echo

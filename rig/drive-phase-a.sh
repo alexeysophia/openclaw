@@ -24,10 +24,10 @@ push '{"match":"SPAWN-A","response":{"type":"tool","name":"sessions_spawn","argu
 push '{"match":"SPAWN-A","response":{"type":"text","text":"PARENT_ACK_A_AFTER_SPAWN_RESULT"}}'
 C0=$(recv_count)
 curl -s "$GW/v1/responses" -X POST -H "$AUTH" -H "Content-Type: application/json" \
-  -H "x-openclaw-session-key: rig-a1-session" \
+  -H "x-openclaw-session-key: agent:main:rig-a1-session" \
   -H "x-openclaw-message-channel: orchestrator" \
   -H "x-openclaw-message-to: user" \
-  -d '{"model":"openclaw","input":"SPAWN-A please run the background job","stream":false}' | head -c 400
+  -d '{"model":"openclaw/main","input":"SPAWN-A please run the background job","stream":false}' | head -c 400
 echo
 wait_send "ANNOUNCE_AUTODELIVER_TEXT" 120
 echo "receiver calls before=$C0 after=$(recv_count)"
@@ -39,9 +39,9 @@ push '{"match":"SPAWN-B","response":{"type":"tool","name":"sessions_spawn","argu
 push '{"match":"SPAWN-B","response":{"type":"text","text":"PARENT_ACK_B_AFTER_SPAWN_RESULT"}}'
 C0=$(recv_count)
 curl -s "$GW/v1/responses" -X POST -H "$AUTH" -H "Content-Type: application/json" \
-  -H "x-openclaw-session-key: rig-a2-session" \
+  -H "x-openclaw-session-key: agent:main:rig-a2-session" \
   -H "x-openclaw-message-channel: orchestrator" \
-  -d '{"model":"openclaw","input":"SPAWN-B please run the background job","stream":false}' | head -c 400
+  -d '{"model":"openclaw/main","input":"SPAWN-B please run the background job","stream":false}' | head -c 400
 echo
 wait_send "ANNOUNCE_NOT_FOR_DELIVERY_B" 45 || true
 echo "receiver calls before=$C0 after=$(recv_count)"
@@ -53,10 +53,10 @@ push '{"match":"SPAWN-C","response":{"type":"tool","name":"sessions_spawn","argu
 push '{"match":"SPAWN-C","response":{"type":"text","text":"PARENT_ACK_C_AFTER_SPAWN_RESULT"}}'
 C0=$(recv_count)
 curl -s "$GW/v1/chat/completions" -X POST -H "$AUTH" -H "Content-Type: application/json" \
-  -H "x-openclaw-session-key: rig-a3-session" \
+  -H "x-openclaw-session-key: agent:main:rig-a3-session" \
   -H "x-openclaw-message-channel: orchestrator" \
   -H "x-openclaw-message-to: user" \
-  -d '{"model":"openclaw","messages":[{"role":"user","content":"SPAWN-C please run the background job"}],"stream":false}' | head -c 400
+  -d '{"model":"openclaw/main","messages":[{"role":"user","content":"SPAWN-C please run the background job"}],"stream":false}' | head -c 400
 echo
 wait_send "ANNOUNCE_AUTODELIVER_TEXT_CC" 120
 echo "receiver calls before=$C0 after=$(recv_count)"
@@ -68,9 +68,9 @@ push '{"match":"SPAWN-D","response":{"type":"tool","name":"sessions_spawn","argu
 push '{"match":"SPAWN-D","response":{"type":"text","text":"PARENT_ACK_D_AFTER_SPAWN_RESULT"}}'
 C0=$(recv_count)
 curl -s "$GW/v1/chat/completions" -X POST -H "$AUTH" -H "Content-Type: application/json" \
-  -H "x-openclaw-session-key: rig-a4-session" \
+  -H "x-openclaw-session-key: agent:main:rig-a4-session" \
   -H "x-openclaw-message-channel: orchestrator" \
-  -d '{"model":"openclaw","messages":[{"role":"user","content":"SPAWN-D please run the background job"}],"stream":false}' | head -c 400
+  -d '{"model":"openclaw/main","messages":[{"role":"user","content":"SPAWN-D please run the background job"}],"stream":false}' | head -c 400
 echo
 wait_send "ANNOUNCE_NOT_FOR_DELIVERY_D" 45 || true
 echo "receiver calls before=$C0 after=$(recv_count)"
