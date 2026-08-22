@@ -1,0 +1,44 @@
+{
+  "gateway": {
+    "mode": "local",
+    "auth": { "mode": "token", "token": "rig-secret" },
+    "http": { "endpoints": { "chatCompletions": { "enabled": true } } }
+  },
+  "models": {
+    "mode": "replace",
+    "providers": {
+      "mock": {
+        "baseUrl": "http://127.0.0.1:8113/v1",
+        "apiKey": "mock-key",
+        "api": "openai-responses",
+        "models": [
+          {
+            "id": "mock-model",
+            "name": "Mock Model",
+            "api": "openai-responses",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0, "output": 0, "cacheRead": 0, "cacheWrite": 0 },
+            "contextWindow": 200000,
+            "maxTokens": 8192
+          }
+        ]
+      }
+    }
+  },
+  "agents": {
+    "defaults": {
+      "model": { "primary": "mock/mock-model" },
+      "workspace": "RIG_DIR/workspace-main",
+      "skipBootstrap": true,
+      "subagents": { "allowAgents": ["background-worker"], "requireAgentId": true }
+    },
+    "entries": {
+      "main": {},
+      "background-worker": { "workspace": "RIG_DIR/worker-workspace" }
+    }
+  },
+  "channels": { "orchestrator": { "enabled": true } },
+  "plugins": { "load": { "paths": ["RIG_DIR/plugins/orchestrator-channel"] } },
+  "tools": { "deny": ["cron", "image_generate"] }
+}
