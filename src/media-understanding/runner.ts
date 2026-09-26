@@ -28,6 +28,7 @@ import {
   resolveAgentModelFallbackValues,
   resolveAgentModelPrimaryValue,
 } from "../config/model-input.js";
+import { findConfiguredProviderModel } from "../config/model-provider-config.js";
 import type { OpenClawConfig } from "../config/types.js";
 import type {
   MediaUnderstandingConfig,
@@ -401,6 +402,25 @@ async function activeModelSupportsNativeVision(params: {
     !/^MiniMax-M3(\b|[-.])/i.test(params.activeModel?.model?.trim() ?? "")
   ) {
     return false;
+  }
+  // Answer from the configured row runtime will resolve: exact provider key before the
+  // normalized fallback (resolveConfiguredProviderConfig), then the literal model row.
+  // models-add rows are excluded: runtime may prefer discovered input over the row.
+  const activeModelId = params.activeModel?.model?.trim();
+  const providers = params.cfg.models?.providers;
+  const configured = activeModelId
+    ? findConfiguredProviderModel(
+        providers?.[activeProvider] ?? findNormalizedProviderValue(providers, activeProvider),
+        activeProvider,
+        activeModelId,
+      )
+    : undefined;
+  if (
+    configured?.input?.includes("image") &&
+    configured.id.trim() === activeModelId &&
+    configured.metadataSource !== "models-add"
+  ) {
+    return true;
   }
   const { findModelInCatalog, readPreparedModelCatalog, modelSupportsVision } =
     await loadPreparedModelCatalogApi();
