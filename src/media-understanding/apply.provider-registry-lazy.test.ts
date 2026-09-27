@@ -51,7 +51,7 @@ describe("applyMediaUnderstanding - lazy provider registry", () => {
 
   beforeEach(() => {
     catalog = [...baseCatalog];
-    resolvePluginCapabilityProvidersSpy.mockClear();
+    resolvePluginCapabilityProvidersSpy.mockReset();
     setActivePluginRegistry(createEmptyPluginRegistry());
   });
 
@@ -122,5 +122,44 @@ describe("applyMediaUnderstanding - lazy provider registry", () => {
     });
 
     expect(resolvePluginCapabilityProvidersSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("a registry build failure still rejects the whole apply (caller's raw-content fallback), built once", async () => {
+    resolvePluginCapabilityProvidersSpy.mockImplementation(() => {
+      throw new Error("registry build failed");
+    });
+    catalog = [
+      { id: "gpt-5.4", name: "GPT-5.4", provider: "usage-proxy", input: ["text"] as const },
+    ];
+    const ctx: MsgContext = {
+      media: [
+        { path: "/tmp/image.png", contentType: "image/png" },
+        { path: "/tmp/note.ogg", contentType: "audio/ogg" },
+      ],
+    };
+
+    await expect(
+      applyMediaUnderstanding({
+        ctx,
+        cfg: {} as OpenClawConfig,
+        activeModel: { provider: "usage-proxy", model: "gpt-5.4" },
+      }),
+    ).rejects.toThrow("registry build failed");
+    expect(resolvePluginCapabilityProvidersSpy).toHaveBeenCalledTimes(1);
+    expect(ctx.MediaUnderstandingDecisions).toBeUndefined();
+  });
+
+  it("a registry that would fail to build is never built on the native-vision skip path", async () => {
+    resolvePluginCapabilityProvidersSpy.mockImplementation(() => {
+      throw new Error("registry build failed");
+    });
+    const cfg = {
+      models: {
+        providers: { "usage-proxy": { models: [{ id: "gpt-5.4", input: ["text", "image"] }] } },
+      },
+    } as unknown as OpenClawConfig;
+
+    await expect(runImageTurn(cfg)).resolves.toBeDefined();
+    expect(resolvePluginCapabilityProvidersSpy).not.toHaveBeenCalled();
   });
 });
