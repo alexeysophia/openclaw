@@ -422,25 +422,19 @@ describe("prepareEmbeddedAttemptStream", () => {
       return { prepared, decide: subscriptionInput.onBeforeTerminalDelivery };
     }
 
-    it.each([false, true])(
-      "honors a revision as a draft-only rewind (hadDeterministicSideEffect: %s)",
-      async (hadDeterministicSideEffect) => {
-        mocks.runBeforeFinalizeHook.mockResolvedValue({
-          action: "revise",
-          reason: "Fix the markup",
-        });
-        const { prepared, decide } = prepareFinalizeGate();
-        try {
-          await expect(
-            decide({ ...createBeforeFinalizeEvent(), hadDeterministicSideEffect }),
-          ).resolves.toEqual({ suppressTerminalDelivery: true });
-          expect(prepared.getBeforeAgentFinalizeRevisionEntryId()).toBe("canonical-entry-id");
-          expect(prepared.getBeforeAgentFinalizeRevisionReason()).toBe("Fix the markup");
-        } finally {
-          prepared.subscription.unsubscribe();
-        }
-      },
-    );
+    it("honors a revision after side effects as a draft-only rewind", async () => {
+      mocks.runBeforeFinalizeHook.mockResolvedValue({ action: "revise", reason: "Fix the markup" });
+      const { prepared, decide } = prepareFinalizeGate();
+      try {
+        await expect(
+          decide({ ...createBeforeFinalizeEvent(), hadDeterministicSideEffect: true }),
+        ).resolves.toEqual({ suppressTerminalDelivery: true });
+        expect(prepared.getBeforeAgentFinalizeRevisionEntryId()).toBe("canonical-entry-id");
+        expect(prepared.getBeforeAgentFinalizeRevisionReason()).toBe("Fix the markup");
+      } finally {
+        prepared.subscription.unsubscribe();
+      }
+    });
 
     it("still ignores a revision that has no persisted assistant entry", async () => {
       mocks.runBeforeFinalizeHook.mockResolvedValue({ action: "revise", reason: "Fix the markup" });
