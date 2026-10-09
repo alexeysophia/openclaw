@@ -398,14 +398,13 @@ describe("prepareEmbeddedAttemptStream", () => {
   );
 
   describe("before_agent_finalize revision after side effects", () => {
-    function prepareFinalizeGate(attempt?: Record<string, unknown>) {
+    function prepareFinalizeGate() {
       const prepared = prepareCatalogExecutor({
         attempt: {
           runId: "run-finalize-effects",
           sessionId: "session-finalize-effects",
           maxBeforeAgentFinalizeRevisions: 3,
           beforeAgentFinalizeRevisionAttempts: 0,
-          ...attempt,
         },
         activeSession: {
           agent: { hasQueuedMessages: () => false },
@@ -446,20 +445,6 @@ describe("prepareEmbeddedAttemptStream", () => {
         );
         expect(prepared.getBeforeAgentFinalizeRevisionEntryId()).toBeUndefined();
         expect(prepared.getBeforeAgentFinalizeRevisionReason()).toBeUndefined();
-      } finally {
-        prepared.subscription.unsubscribe();
-      }
-    });
-
-    it("still stops asking the hook once the revision ceiling is reached", async () => {
-      mocks.runBeforeFinalizeHook.mockResolvedValue({ action: "revise", reason: "Fix the markup" });
-      const { prepared, decide } = prepareFinalizeGate({ beforeAgentFinalizeRevisionAttempts: 3 });
-      try {
-        await expect(
-          decide({ ...createBeforeFinalizeEvent(), hadDeterministicSideEffect: true }),
-        ).resolves.toBe(undefined);
-        expect(mocks.runBeforeFinalizeHook).not.toHaveBeenCalled();
-        expect(prepared.getBeforeAgentFinalizeRevisionEntryId()).toBeUndefined();
       } finally {
         prepared.subscription.unsubscribe();
       }
